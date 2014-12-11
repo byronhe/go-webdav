@@ -16,18 +16,38 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/google/go-webdav"
 	"github.com/google/go-webdav/memfs"
 )
 
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(30 * time.Second)
+	return tc, nil
+}
+
 func main() {
 	srv := webdav.NewWebDAV(memfs.NewMemFS())
 	srv.Debug = true
-	log.Printf("Listening on http://localhost:8080/...")
-	err := http.ListenAndServe(":8080", srv)
+	var addr = "0.0.0.0:8080"
+	log.Printf("Listening on http://" + addr + "/...")
+	var server = &http.Server{Addr: addr, Handler: srv}
+	ln, err := net.Listen("tcp4", addr)
 	if err != nil {
 		panic(err)
 	}
+	server.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)})
+
 }
